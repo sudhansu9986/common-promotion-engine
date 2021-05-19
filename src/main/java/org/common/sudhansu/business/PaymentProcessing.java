@@ -22,40 +22,9 @@ public class PaymentProcessing {
         for (CartItem cartItem: cartItemList){
             int totalQuantity = cartItem.getQuantity();
             if(isPromotionOnItemAvailableAndSatisfies(cartItem)){
-                PromotionEngine promotionEngine = getPromotionEngineOnItem(cartItem.getSKU());
-                if(promotionEngine.isPromoOnQuantity()){
-                    int promoQuantity = promotionEngine.getQuantityPromo();
-                    int discountQuantity = totalQuantity / promoQuantity;
-                    int withoutDiscQuantity = totalQuantity % promoQuantity;
-                    int discountOnQuantity = promotionEngine.getDiscountOnQuantity();
-                    //Logic for discount
-                    totalPriceOfAllItems += ((cartItem.getSKU().getPrice()*promoQuantity*discountQuantity - discountOnQuantity*discountQuantity)+(cartItem.getSKU().getPrice()*withoutDiscQuantity));
-
-                }else if(promotionEngine.isPromoOnItemPercentage()){
-                    int discountPercentage = promotionEngine.getItemPercentage();
-                    //bill - (bill * discount / 100)
-                    totalPriceOfAllItems += ((cartItem.getSKU().getPrice() - (cartItem.getSKU().getPrice() * discountPercentage/100))*totalQuantity);
-                }
-
+                totalPriceOfAllItems += getTotalPriceAfterDiscountPromotionEngine(cartItem, totalQuantity);
             }else if(isMultiPromotionOnItemsAndCompanionAvailable(cartItem, cartItemList)){
-                MultiPromotionEngine multiPromotionEngine = getMultiPromotionEngineOnItem(cartItem.getSKU());
-                Character value = multiPromotionEngine.getMultiItem().get(cartItem.getSKU().getSkuId());
-                int quantity = cartItem.getQuantity();
-                int valueCount = cartItemList.stream().filter(x->x.getSKU().getSkuId().equals(value)).mapToInt(CartItem::getQuantity).sum();
-                if(quantity == valueCount){
-                    totalPriceOfAllItems += multiPromotionEngine.getPriceOfBothItem()*quantity;
-                    cartItemList.removeIf(x->x.getSKU().getSkuId().equals(value));
-                }else if(quantity > valueCount){
-                    totalPriceOfAllItems += ((multiPromotionEngine.getPriceOfBothItem()*valueCount) + (cartItem.getSKU().getPrice()*(quantity-valueCount)));
-                    cartItemList.removeIf(x->x.getSKU().getSkuId().equals(value));
-                }else if(quantity < valueCount) {
-                    Optional<CartItem> valuePriceSku = cartItemList.stream().filter(x -> x.getSKU().getSkuId().equals(value)).findAny();
-                    if (valuePriceSku.isPresent()) {
-                        totalPriceOfAllItems += ((multiPromotionEngine.getPriceOfBothItem() * quantity) + (valuePriceSku.get().getSKU().getPrice() * (valueCount - quantity)));
-                        cartItemList.removeIf(x -> x.getSKU().getSkuId().equals(value));
-                    }
-                }
-
+                totalPriceOfAllItems += getTotalPriceAfterDiscountMultiPromotionEngine(cartItem, cartItemList);
             }else{
                 totalPriceOfAllItems += (cartItem.getSKU().getPrice()*totalQuantity);
             }
@@ -64,6 +33,59 @@ public class PaymentProcessing {
         shoppingCart.setShoppingCartId("SCID123");
         shoppingCart.setTotalPrice(totalPriceOfAllItems);
         return shoppingCart;
+    }
+
+    /**
+     * method to get the total price after discount promotion engine
+     * @param cartItem
+     * @param totalQuantity
+     * @return total price of the item after discount applicable
+     */
+    public double getTotalPriceAfterDiscountPromotionEngine(CartItem cartItem, int totalQuantity){
+        double totalPriceOfAllItem = 0;
+        PromotionEngine promotionEngine = getPromotionEngineOnItem(cartItem.getSKU());
+        if(promotionEngine.isPromoOnQuantity()){
+            int promoQuantity = promotionEngine.getQuantityPromo();
+            int discountQuantity = totalQuantity / promoQuantity;
+            int withoutDiscQuantity = totalQuantity % promoQuantity;
+            int discountOnQuantity = promotionEngine.getDiscountOnQuantity();
+            //Logic for discount
+            totalPriceOfAllItem = ((cartItem.getSKU().getPrice()*promoQuantity*discountQuantity - discountOnQuantity*discountQuantity)+(cartItem.getSKU().getPrice()*withoutDiscQuantity));
+
+        }else if(promotionEngine.isPromoOnItemPercentage()){
+            int discountPercentage = promotionEngine.getItemPercentage();
+            //bill - (bill * discount / 100)
+            totalPriceOfAllItem = ((cartItem.getSKU().getPrice() - (cartItem.getSKU().getPrice() * discountPercentage/100))*totalQuantity);
+        }
+        return totalPriceOfAllItem;
+    }
+
+    /**
+     * method to get total price after discount taking from multi promotion engine
+     * @param cartItem
+     * @param cartItemList
+     * @return total price of both item
+     */
+    public double getTotalPriceAfterDiscountMultiPromotionEngine(CartItem cartItem, List<CartItem> cartItemList){
+        double totalPriceOfBothItem = 0;
+        MultiPromotionEngine multiPromotionEngine = getMultiPromotionEngineOnItem(cartItem.getSKU());
+        Character value = multiPromotionEngine.getMultiItem().get(cartItem.getSKU().getSkuId());
+        int quantity = cartItem.getQuantity();
+        int valueCount = cartItemList.stream().filter(x->x.getSKU().getSkuId().equals(value)).mapToInt(CartItem::getQuantity).sum();
+        if(quantity == valueCount){
+            totalPriceOfBothItem = multiPromotionEngine.getPriceOfBothItem()*quantity;
+            cartItemList.removeIf(x->x.getSKU().getSkuId().equals(value));
+        }else if(quantity > valueCount){
+            totalPriceOfBothItem = ((multiPromotionEngine.getPriceOfBothItem()*valueCount) + (cartItem.getSKU().getPrice()*(quantity-valueCount)));
+            cartItemList.removeIf(x->x.getSKU().getSkuId().equals(value));
+        }else{
+            Optional<CartItem> valuePriceSku = cartItemList.stream().filter(x -> x.getSKU().getSkuId().equals(value)).findAny();
+            if (valuePriceSku.isPresent()) {
+                totalPriceOfBothItem = ((multiPromotionEngine.getPriceOfBothItem() * quantity) + (valuePriceSku.get().getSKU().getPrice() * (valueCount - quantity)));
+                cartItemList.removeIf(x -> x.getSKU().getSkuId().equals(value));
+            }
+        }
+        return totalPriceOfBothItem;
     }
 
     /**
